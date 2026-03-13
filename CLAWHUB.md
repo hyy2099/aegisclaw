@@ -21,12 +21,12 @@ clawhub login
 ```
 
 输入你的账号：
-- 用户名: `hyy2099`
+- 用户名: ``
 - 密码: （你的密码）
 
 或者使用 token 登录：
 ```bash
-clawhub login --token=clh_LWWshu7utCFBj2hkE6Kca1jGYX6RkGlyRzi2n5eAxgk
+clawhub login --token=
 ```
 
 ## 📤 上传项目
@@ -43,7 +43,7 @@ clawhub publish
 ### 方法二：通过网页上传
 
 1. 访问：https://clawhub.ai
-2. 登录（使用 `hyy2099`）
+2. 登录（使用 ``）
 3. 点击 "Upload Plugin"
 4. 填写信息：
    - **Name**: aegisclaw
