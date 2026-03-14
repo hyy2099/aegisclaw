@@ -1,7 +1,7 @@
 {
   "name": "aegisclaw",
-  "version": "1.0.0",
-  "description": "🦞 金甲龙虾 - 币安安全赚币与护境神将。基于最小权限原则的防御型 AI 代理，专注低风险套利与全自动赚取 BNB。",
+  "version": "2.0.0",
+  "description": "🦞 金甲龙虾 - 币安安全赚币与护境神将。基于最小权限原则的防御型 AI 代理，专注低风险套利与全自动赚取 BNB。支持 Launchpool/Megadrop 监控、自动 Dust 清理、资金费率套利评估。",
   "author": "hyy2099",
   "repository": "https://github.com/hyy2099/aegisclaw",
   "main": "openclaw_plugin/plugin.py",
@@ -20,7 +20,9 @@
     "cryptocurrency",
     "bnb",
     "launchpool",
-    "funding-rate"
+    "funding-rate",
+    "megadrop",
+    "dust-sweeper"
   ],
   "commands": {
     "init": "初始化插件: /aegisclaw init <api_key> <api_secret>",
@@ -28,6 +30,9 @@
     "scan": "扫描闲置资产和零钱",
     "arbitrage": "扫描资金费率套利机会",
     "dust": "执行零钱兑换",
+    "auto-dust": "自动 Dust 清理（带安全检查）",
+    "launchpool": "扫描 Launchpool/Megadrop 项目",
+    "auto-arbitrage": "自动套利评估（生成交易计划）",
     "report": "生成周收益战报",
     "status": "查看当前状态",
     "help": "显示帮助信息"
@@ -35,10 +40,14 @@
   "environment": {
     "BINANCE_API_KEY": "Binance API Key（必需）",
     "BINANCE_API_SECRET": "Binance API Secret（必需）",
-    "BINANCE_TESTNET": "是否使用测试网（可选，默认false）"
+    "BINANCE_TESTNET": "是否使用测试网（可选，默认false）",
+    "ENABLE_AUTO_DUST": "是否启用自动 Dust 清理（可选，默认false）",
+    "ENABLE_AUTO_ARBITRAGE": "是否启用自动套利评估（可选，默认false）",
+    "ENABLE_LAUNCHPOOL_AUTO": "是否启用 Launchpool 自动参与（可选，默认false）"
   },
   "permissions": [
     "network",
     "storage"
-  ]
+  ],
+  "changelog": "v2.0.0 - 添加 Launchpool/Megadrop 监控、自动 Dust 清理、自动套利评估功能"
 }
