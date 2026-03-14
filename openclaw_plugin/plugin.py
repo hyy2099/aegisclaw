@@ -16,6 +16,7 @@ from core.security_checker import SecurityChecker
 from core.asset_scanner import AssetScanner
 from core.funding_arbitrage import FundingArbitrage
 from core.report_generator import ReportGenerator
+from core.launchpool_monitor import LaunchpoolMonitor
 from db.database import Database
 
 
@@ -23,7 +24,7 @@ class AegisClawPlugin:
     """金甲龙虾 OpenClaw 插件"""
 
     name = "aegisclaw"
-    version = "1.0.0"
+    version = "2.0.0"
     description = "🦞 金甲龙虾 - 币安安全赚币与护境神将"
     author = "AegisClaw Team"
 
@@ -34,6 +35,7 @@ class AegisClawPlugin:
         self.asset_scanner = None
         self.arbitrage = None
         self.report_generator = None
+        self.launchpool_monitor = None
         self.database = None
 
     def initialize(self, api_key: str = None, api_secret: str = None, testnet: bool = False):
@@ -57,6 +59,7 @@ class AegisClawPlugin:
             self.asset_scanner = AssetScanner(self.api_client, config.strategy)
             self.arbitrage = FundingArbitrage(self.api_client, config.strategy)
             self.report_generator = ReportGenerator(self.api_client, self.database)
+            self.launchpool_monitor = LaunchpoolMonitor(self.api_client, config.strategy)
             self.initialized = True
 
             return {
@@ -91,7 +94,10 @@ class AegisClawPlugin:
             "scan": self.cmd_scan_assets,
             "arbitrage": self.cmd_scan_arbitrage,
             "dust": self.cmd_dust_sweep,
+            "auto-dust": self.cmd_auto_dust,
             "report": self.cmd_weekly_report,
+            "launchpool": self.cmd_launchpool,
+            "auto-arbitrage": self.cmd_auto_arbitrage,
             "help": self.cmd_help,
             "status": self.cmd_status
         }
@@ -201,6 +207,25 @@ class AegisClawPlugin:
                 "error": f"零钱兑换失败: {str(e)}"
             }
 
+    def cmd_auto_dust(self, args: list) -> Dict:
+        """自动 Dust 清理命令"""
+        check = self.check_initialized()
+        if check:
+            return check
+
+        try:
+            dry_run = "dry" in [a.lower() for a in args] if args else False
+            result = self.asset_scanner.auto_dust_sweep(dry_run=dry_run)
+            return {
+                "success": True,
+                "message": self.asset_scanner.format_auto_dust_report(result)
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"自动 Dust 清理失败: {str(e)}"
+            }
+
     def cmd_weekly_report(self, args: list) -> Dict:
         """周报命令"""
         check = self.check_initialized()
@@ -219,24 +244,130 @@ class AegisClawPlugin:
                 "error": f"生成周报失败: {str(e)}"
             }
 
-    def cmd_status(self, args: list) -> Dict:
-        """状态命令"""
+    def cmd_launchpool(self, args: list) -> Dict:
+        """Launchpool 监控命令"""
         check = self.check_initialized()
         if check:
             return check
 
         try:
+            projects = []
+            launchpool_projects = self.launchpool_monitor.scan_launchpool_projects()
+            projects.extend(launchpool_projects)
+            megadrop_projects = self.launchpool_monitor.scan_megadrop_projects()
+            projects.extend(megadrop_projects)
+
+            return {
+                "success": True,
+                "message": self.launchpool_monitor.format_report(projects)
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Launchpool 扫描失败: {str(e)}"
+            }
+
+    def cmd_auto_arbitrage(self, args: list) -> Dict:
+        """自动套利评估命令"""
+        check = self.check_initialized()
+        if check:
+            return check
+
+        try:
+            dry_run = "dry" not in [a.lower() for a in args] if args else True
+            opportunities = self.arbitrage.scan_arbitrage_opportunities()
+
+            if not opportunities:
+                return {
+                    "success": True,
+                    "message": "💰 暂无高价值套利机会\n\n⚠️ 注意: 当前没有符合阈值的套利机会"
+                }
+
+            best = opportunities[0]
+            amount = config.strategy.max_arbitrage_amount
+            estimated_profit = amount * (abs(best["funding_rate"]))
+            apy = abs(best["funding_rate"]) * 100 * 365 * 3
+
+            report = f"""💰 自动套利评估
+{'='*40}
+
+✅ 套利计划已生成
+📊 交易对: {best['symbol']}
+💵 交易金额: ${amount:.2f}
+📈 资金费率: {best['funding_rate_pct']:+.4f}%
+💰 预期收益: ${estimated_profit:.4f}
+📊 预估年化: {apy:.2f}%
+🎯 操作建议: {best['recommendation']}
+
+⚠️ 注意:
+   • 此为模拟评估，未实际执行交易
+   • 如需执行，请手动在 Binance 操作
+   • 建议使用子账户，控制风险
+
+🚀 #AIBinance #金甲龙虾 #套利
+"""
+            return {
+                "success": True,
+                "message": report
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"自动套利评估失败: {str(e)}"
+            }
+
+    def cmd_status(self, args: list) -> Dict:
+        """状态命令（完整版）"""
+        check = self.check_initialized()
+        if check:
+            return check
+
+        try:
+            import datetime
             balances = self.api_client.get_balances()
             self.report_generator.save_snapshot(balances)
 
-            status = f"""
-🦞 金甲龙虾状态
+            bnb = next((b["total"] for b in balances if b["asset"] == "BNB"), 0)
+            usdt = next((b["free"] for b in balances if b["asset"] == "USDT"), 0)
+
+            today_trades = 0
+            last_trade = "无"
+            can_trade = "✅"
+            max_trades = config.binance.max_daily_trades
+
+            try:
+                trading_status = self.api_client.get_trading_status()
+                is_locked = trading_status.get("isLocked", False)
+                if is_locked:
+                    can_trade = "❌"
+                else:
+                    trades_history = self.api_client.get_user_trades_history(limit=100)
+                    today = datetime.date.today().isoformat()
+                    today_trades = sum(1 for t in trades_history if t.get("time", 0) > 0 and datetime.datetime.fromtimestamp(t["time"] / 1000).date().isoformat() == today)
+            except:
+                pass
+
+            auto_dust_status = "✅" if config.strategy.enable_auto_dust else "❌"
+            auto_arbitrage_status = "⚠️" if config.strategy.enable_auto_arbitrage else "❌"
+            launchpool_auto_status = "✅" if config.strategy.enable_launchpool_auto else "❌"
+
+            status = f"""🦞 金甲龙虾状态
 {'='*30}
 
 🔌 API 连接: ✅ 正常
 📊 资产数量: {len(balances)}
-💎 BNB 余额: {next((b['total'] for b in balances if b['asset']=='BNB'), 0):.4f}
-💵 USDT 余额: {next((b['free'] for b in balances if b['asset']=='USDT'), 0):.2f}
+💎 BNB 余额: {bnb:.4f}
+💵 USDT 余额: {usdt:.2f}
+
+🛡 安全状态:
+   • 今日交易次数: {today_trades}/{max_trades}
+   • 上次交易: {last_trade}
+   • 可交易: {can_trade}
+
+🚀 自动功能状态:
+   • 自动 Dust 清理: {auto_dust_status} {'启用' if config.strategy.enable_auto_dust else '禁用'}
+   • 自动套利: {auto_arbitrage_status} {'启用' if config.strategy.enable_auto_arbitrage else '禁用'}
+   • Launchpool 自动参与: {launchpool_auto_status} {'启用' if config.strategy.enable_launchpool_auto else '禁用'}
 """
             return {
                 "success": True,
@@ -267,6 +398,17 @@ class AegisClawPlugin:
 
 🧹 /aegisclaw dust [资产列表]
     执行零钱兑换（不传参数自动扫描）
+
+🤖 /aegisclaw auto-dust [dry]
+    自动 Dust 清理（带安全检查）
+    加 dry 参数为干运行模式
+
+💡 /aegisclaw auto-arbitrage [dry]
+    自动套利评估（生成交易计划）
+    不加 dry 默认为模拟评估模式
+
+🎣 /aegisclaw launchpool
+    扫描 Launchpool/Megadrop 项目
 
 📊 /aegisclaw report
     生成周收益战报
@@ -308,7 +450,10 @@ def get_commands() -> list:
         "scan",
         "arbitrage",
         "dust",
+        "auto-dust",
         "report",
+        "launchpool",
+        "auto-arbitrage",
         "status",
         "help"
     ]

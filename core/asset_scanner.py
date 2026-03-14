@@ -5,6 +5,7 @@
 from typing import Dict, List, Optional
 from core.api_client import BinanceAPIClient
 from config import StrategyConfig
+import datetime
 
 
 class AssetScanner:
@@ -209,5 +210,115 @@ class AssetScanner:
                 elif s["type"] == "dust_sweep":
                     report += f"  🧹 {s['message']}\n"
                     report += f"     资产: {', '.join(s['assets'])}\n"
+
+        return report
+
+    def auto_dust_sweep(self, dry_run: bool = False) -> Dict:
+        """自动执行 Dust 清理（带安全检查）"""
+        result = {
+            "success": False,
+            "message": "",
+            "details": {}
+        }
+
+        # 1. 扫描 dust 资产
+        scan_result = self.scan_idle_assets()
+        dust_assets = scan_result.get("dust_assets", [])
+
+        if not dust_assets:
+            result["message"] = "没有可清理的 dust 资产"
+            return result
+
+        # 2. 获取交易状态
+        try:
+            trading_status = self.api_client.get_trading_status()
+            is_locked = trading_status.get("isLocked", False)
+        except:
+            is_locked = False
+
+        if is_locked:
+            result["message"] = "账户交易被锁定，无法执行自动清理"
+            return result
+
+        # 3. 获取 BNB 余额（用于支付手续费）
+        bnb_balance = 0
+        try:
+            balances = self.api_client.get_balances()
+            bnb_balance = next((b["free"] for b in balances if b["asset"] == "BNB"), 0)
+        except:
+            pass
+
+        if bnb_balance < 0.001:
+            result["message"] = "BNB 余额不足 0.001，无法支付手续费"
+            return result
+
+        # 4. 准备清理资产列表
+        asset_list = [a["asset"] for a in dust_assets]
+
+        # 5. 干跑模式检查
+        if dry_run:
+            result["success"] = True
+            result["message"] = f"[干运行] 将清理 {len(asset_list)} 种 dust 资产"
+            result["details"] = {
+                "assets": asset_list,
+                "total_value": scan_result.get("dust_total_value", 0),
+                "bnb_balance": bnb_balance
+            }
+            return result
+
+        # 6. 执行清理
+        try:
+            sweep_result = self.api_client.dust_transfer(asset_list)
+
+            result["success"] = sweep_result.get("success", False)
+            result["message"] = "清理成功" if result["success"] else "清理失败"
+            result["details"] = sweep_result
+
+            if result["success"]:
+                total_transferred = sweep_result.get("totalTransfered", 0)
+                transfer_result = sweep_result.get("transferResult", [])
+
+                # 格式化详细信息
+                details_text = {
+                    'success': True,
+                    'totalTransfered': total_transferred,
+                    'transferResult': transfer_result
+                }
+                result["formatted_details"] = details_text
+
+        except Exception as e:
+            result["message"] = f"清理失败: {str(e)}"
+            result["details"] = {"error": str(e)}
+
+        return result
+
+    def format_auto_dust_report(self, result: Dict) -> str:
+        """格式化自动 dust 清理报告"""
+        report = "🧹 执行 dust 清理...\n\n"
+
+        if result["success"]:
+            report += "✅ 清理成功\n"
+            report += f"📝 成功清理 {len(result['details'].get('transferResult', []))} 种 dust 资产\n"
+
+            if "formatted_details" in result:
+                details = result["formatted_details"]
+                report += f"📊 详情: {{\n"
+                report += f"  'success': {details['success']},\n"
+                report += f"  'totalTransfered': {details.get('totalTransfered', 0)},\n"
+                report += f"  'transferResult': [\n"
+                for item in details.get('transferResult', []):
+                    report += f"    {{'asset': '{item.get('asset', '')}', 'amount': '{item.get('amount', '')}'}},\n"
+                report += f"  ]\n"
+                report += f"}}\n"
+        else:
+            report += f"❌ {result['message']}\n"
+            if "details" in result and "assets" in result["details"]:
+                report += f"📋 待清理资产: {', '.join(result['details']['assets'])}\n"
+
+        report += "\n⚠️ 提醒:\n"
+        report += "   • Dust 清理将小额资产转换为 BNB\n"
+        report += "   • 需要持有 BNB 支付手续费\n"
+        report += "   • 交易可能需要几分钟完成\n\n"
+        report += "🚀 #AIBinance #金甲龙虾 #DustSweeper\n"
 
         return report

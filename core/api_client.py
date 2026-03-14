@@ -300,3 +300,47 @@ class BinanceAPIClient:
             "symbol": symbol,
             "limit": limit
         }, signed=True)
+
+    # ========== Launchpool 相关 ==========
+
+    def get_launchpool_projects(self) -> List[Dict]:
+        """获取 Launchpool 项目列表"""
+        return self._request("GET", "/sapi/v1/launchpool/project/list")
+
+    def get_launchpool_user_assets(self) -> Dict:
+        """获取用户质押资产"""
+        return self._request("GET", "/sapi/v1/launchpool/userHoldings", signed=True)
+
+    def purchase_launchpool(self, project_id: str, amount: float) -> Dict:
+        """参与 Launchpool (简化接口，实际需要根据具体类型调用)"""
+        # 注意：不同项目类型调用不同的接口
+        # 这里是一个通用示例，实际使用时需要根据项目类型调整
+        return self._request("POST", "/sapi/v1/launchpool/purchase", {
+            "id": project_id,
+            "amount": amount
+        }, signed=True)
+
+    def get_megadrop_projects(self) -> List[Dict]:
+        """获取 Megadrop 项目列表"""
+        return self._request("GET", "/sapi/v1/megadrop/project/list")
+
+    def get_megadrop_user_rewards(self) -> Dict:
+        """获取用户 Megadrop 奖励"""
+        return self._request("GET", "/sapi/v1/megadrop/userRewards", signed=True)
+
+    # ========== 自动化工具相关 ==========
+
+    def get_account_status(self) -> Dict:
+        """获取账户状态（交易限制等）"""
+        return self._request("GET", "/sapi/v1/account/status", signed=True)
+
+    def get_trading_status(self) -> Dict:
+        """获取交易状态"""
+        return self._request("GET", "/sapi/v1/account/apiTradingStatus", signed=True)
+
+    def get_user_trades_history(self, symbol: str = None, limit: int = 100) -> List[Dict]:
+        """获取交易历史"""
+        params = {"limit": limit}
+        if symbol:
+            params["symbol"] = symbol
+        return self._request("GET", "/api/v3/myTrades", params, signed=True)

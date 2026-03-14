@@ -37,6 +37,16 @@ class StrategyConfig:
     # Dust Sweeper 最小兑换阈值
     min_dust_threshold: float = 10.0  # USDT 等值
 
+    # 自动化功能开关
+    enable_auto_dust: bool = False  # 自动 dust 清理
+    enable_auto_arbitrage: bool = False  # 自动套利评估
+    enable_launchpool_auto: bool = False  # Launchpool 自动参与
+    max_arbitrage_amount: float = 100.0  # 最大套利金额 (USDT)
+
+    # 安全配置
+    max_auto_trades_per_day: int = 5  # 每日最大自动交易次数
+    min_trade_interval: int = 300  # 最小交易间隔 (秒, 5分钟)
+
 @dataclass
 class DatabaseConfig:
     """数据库配置"""
